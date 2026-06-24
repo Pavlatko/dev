@@ -1,0 +1,191 @@
+﻿<!DOCTYPE html>
+<html lang="cs">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Správce localStorage</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
+        
+        .controls { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+        
+        button { padding: 10px 15px; cursor: pointer; border: 1px solid #ccc; border-radius: 4px; background: #f9f9f9; }
+        button:hover { background: #e0e0e0; }
+
+        .btn-update { background-color: #e7f3ff; }
+        .btn-export { background-color: #e8f5e9; }
+        .btn-import { background-color: #fff3e0; }
+        
+        /* Styl pro nové tlačítko Factory reset */
+        .btn-reset { background-color: #ffebee; color: #d32f2f; font-weight: bold; border-color: #ef9a9a; }
+        .btn-reset:hover { background-color: #ffcdd2; }
+
+        .stats-box { background: #f4f4f4; padding: 15px; border-radius: 5px; margin-bottom: 20px; border-left: 4px solid #ccc; }
+        .stats-box p { margin: 5px 0; font-size: 0.95em; }
+
+        ul { list-style-type: none; padding: 0; border: 1px solid #ccc; border-radius: 5px; }
+        li { border-bottom: 1px solid #eee; }
+        
+        .li-header { 
+            padding: 15px; 
+            display: flex; 
+            justify-content: space-between; 
+            align-items: center; 
+            cursor: pointer;
+        }
+        .li-header:hover { background: #f0f0f0; }
+        
+        .li-detail { 
+            padding: 0 15px 15px 15px; 
+            display: none; 
+            background: #fafafa;
+            word-break: break-all;
+            border-top: 1px solid #eee;
+        }
+
+        .btn-delete { background: #ff4d4d; color: white; border: none; padding: 5px 10px; border-radius: 3px; font-weight: bold; }
+        .key-index { color: #555; font-weight: bold; margin-right: 10px; width: 30px; display: inline-block; }
+        .key-name { font-weight: bold; }
+        .char-count { color: #888; font-size: 0.85em; margin-left: 10px; }
+    </style>
+</head>
+<body>
+
+    <h1>Správce localStorage</h1>
+    
+    <div id="stats" class="stats-box"></div>
+
+    <div class="controls">
+        <button class="btn-update" onclick="vypsatVse()">Aktualizovat seznam</button>
+        <button class="btn-export" onclick="exportovatJSON()">Exportovat do JSON</button>
+        <input type="file" id="fileInput" style="display:none" accept=".json" onchange="importovatJSON(event)">
+        <button class="btn-import" onclick="document.getElementById('fileInput').click()">Obnovit ze souboru</button>
+        <button class="btn-reset" onclick="factoryReset()">Factory reset</button>
+    </div>
+    
+    <ul id="vypis"></ul>
+
+    <script>
+        window.onload = vypsatVse;
+
+        function vypsatVse() {
+            const seznam = document.getElementById('vypis');
+            const statsBox = document.getElementById('stats');
+            seznam.innerHTML = ''; 
+
+            let keys = [];
+            let celkovaDelka = 0;
+
+            for (let i = 0; i < localStorage.length; i++) {
+                keys.push(localStorage.key(i));
+            }
+
+            keys.sort();
+
+            // Výpočet statistik
+            keys.forEach(klic => {
+                const val = localStorage.getItem(klic);
+                celkovaDelka += val ? val.length : 0;
+            });
+
+            // Vypsání statistik
+            statsBox.innerHTML = `
+                <p><strong>Počet klíčů:</strong> ${keys.length}</p>
+                <p><strong>Celkem dat:</strong> ${celkovaDelka} znaků</p>
+            `;
+
+            // Výpis seznamu
+            keys.forEach((klic, index) => {
+                const hodnota = localStorage.getItem(klic);
+                const delka = hodnota ? hodnota.length : 0;
+                
+                const li = document.createElement('li');
+
+                li.innerHTML = `
+                    <div class="li-header" onclick="toggleDetail(this)">
+                        <span>
+                            <span class="key-index">${index + 1}.</span>
+                            <span class="key-name">${klic}</span>
+                            <span class="char-count">(${delka} znaků)</span>
+                        </span>
+                        <button class="btn-delete" onclick="event.stopPropagation(); smazatKlic('${klic}')">✕</button>
+                    </div>
+                    <div class="li-detail">
+                        <strong>Hodnota:</strong><br>${hodnota}
+                    </div>
+                `;
+                
+                seznam.appendChild(li);
+            });
+        }
+
+        function exportovatJSON() {
+            let data = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const klic = localStorage.key(i);
+                data[klic] = localStorage.getItem(klic);
+            }
+
+            const jsonString = JSON.stringify(data, null, 2);
+            const now = new Date();
+            const datum = now.toISOString().slice(0, 10);
+            const cas = now.toTimeString().slice(0, 5).replace(':', '-');
+            const nazevSouboru = `Pavlatko_LSbackup_${datum}_${cas}.json`;
+
+            const blob = new Blob([jsonString], { type: "application/json;charset=utf-8" });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = nazevSouboru;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importovatJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    Object.keys(data).forEach(klic => {
+                        localStorage.setItem(klic, data[klic]);
+                    });
+                    alert("Záloha úspěšně importována!");
+                    vypsatVse();
+                } catch (err) {
+                    alert("Chyba při čtení souboru. Ujisti se, že jde o validní JSON.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function toggleDetail(element) {
+            const detail = element.nextElementSibling;
+            detail.style.display = (detail.style.display === 'block') ? 'none' : 'block';
+        }
+
+        function smazatKlic(klic) {
+            if (confirm(`Opravdu chceš smazat klíč "${klic}"?`)) {
+                localStorage.removeItem(klic);
+                vypsatVse();
+            }
+        }
+
+        // Nová funkce pro kompletní vymazání localStorage
+        function factoryReset() {
+            const varovani = "VAROVÁNÍ: Opravdu chceš provést kompletní 'Factory reset'?\n\nTímto krokem se nenávratně smažou úplně všechna data v localStorage. Tuto akci nelze vzít zpět.\n\nChceš pokračovat?";
+            
+            if (confirm(varovani)) {
+                localStorage.clear();
+                vypsatVse();
+                alert("Factory reset byl proveden. Všechna data jsou vymazána.");
+            }
+        }
+    </script>
+</body>
+</html>
